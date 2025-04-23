@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8" />
+<title>Mini-NN Online</title>
+
+<!-- Plotly para o gráfico -->
+<script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
+
+<!-- Cytoscape para visual da rede -->
+<script src="https://unpkg.com/cytoscape@3/dist/cytoscape.min.js"></script>
+
+<style>
+  body   { font-family:system-ui; margin:0 2rem; }
+  textarea{ width:320px; height:100px; }
+  #liveLoss{ max-width:500px; height:260px; }
+  #liveNet { width:500px; height:260px; border:1px solid #ccc; }
+  img    { max-width:480px; margin:1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Mini Rede Neural – Token Predict</h1>
+
+<textarea id="txt" placeholder="Digite pelo menos 5 frases …"></textarea><br>
+<button id="bt">Treinar!</button>
+
+<div id="loading" style="display:none; font-weight:bold; color:#444;">
+  ⏳ Treinando... por favor, aguarde.
+</div>
+
+<h2>Status do Treinamento em Tempo Real</h2>
+<p>Mostra a época, batch, perda e os pesos anteriores -> novos.</p>
+<p>Limite de 10 pesos sendo atualizados para demonstracao ( sao muito mais )</p>
+
+<pre id="status">{}</pre>
+
+<h2>Perda ao vivo</h2>
+<section id="liveLoss"></section>
+
+<h2>Rede (embeddings → hidden)</h2>
+<section id="liveNet"></section>
+
+<h2>Gráficos finais</h2>
+<section id="finalImgs"></section>
+
+<!-- JS principal -->
+<script src="script.js"></script>
+</body>
+</html>
