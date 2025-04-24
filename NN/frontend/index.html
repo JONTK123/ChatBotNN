@@ -74,19 +74,22 @@
     }
     /* coluna esquerda fixa estreita */
     #status-container {
-      flex: 0 0 280px;
+      flex: 0 0 400px;
       margin-left: -20px;
+      overflow-x: auto; /* caso os valores ainda sejam largos */
     }
+
     /* coluna direita ocupa resto e é bem larga */
     #graphs-container {
-      flex: 1 1 auto;
-      min-width: 900px;
+      flex-grow: 3;
+      flex-shrink: 1;
+      min-width: 700px;
     }
 
     /* --- gráficos bem grandes --- */
     #liveNet, #liveLoss {
       width: 100%;
-      height: 480px;
+      height: 550px;
       border: 1px solid #444;
       background: #1a1a1a;
     }
@@ -151,9 +154,40 @@
         <h2>Rede (embeddings → hidden)</h2>
         <div id="liveNet"></div>
         <div class="legend">
-          Legenda: Cada nó é um neurônio. Cores (azul→vermelho) variam com ativação.<br>
-          Linhas <span style="color:red">vermelhas</span> = aumento de peso, <span style="color:dodgerblue">azuis</span> = redução.
+          <h3 style="margin:.2em 0">📜 Como ler este gráfico?</h3>
+
+          <ul style="text-align:left; margin:0 auto; max-width:820px; line-height:1.4">
+            <li><strong>Função de ativação</strong>: trocamos <code>ReLU</code> por
+                <code>tanh</code> ― ela deixa os neurônios terem valores
+                <em>negativos</em> <u>e positivos</u>, por isso você vê bolinhas 🔴
+                (negativas) e 🔵 (positivas).</li>
+
+            <li><strong>Número de neurônios de embedding</strong>: agora são
+                <b>6&nbsp;dimensões</b>. Isso deixa a rede pequena o bastante para
+                caber na tela, mas expressiva o bastante para ver padrões.
+                <small>(Para compensar a menor capacidade, subimos o treino para
+                <code>100&nbsp;épocas</code>.)</small></li>
+
+            <li><strong>4 bolinhas de entrada</strong> (<code>In_0 … In_3</code>)
+                → representam os <strong>4 tokens mais recentes</strong> do seu texto
+                de treino.
+                Cada número que aparece dentro da bolinha é uma coordenada do vetor
+                de embedding daquele token.</li>
+
+            <li><strong>4 bolinhas de saída</strong> (<code>Out_TOP_0 … Out_TOP_3</code>)
+                → mostram os <em>quatro tokens mais prováveis</em> que a rede está
+                prevendo no instante atual.
+                O texto é o token decodificado; o número entre parênteses é o
+                <em>logit</em> (quanto maior, mais provável).</li>
+
+            <li><strong>Cores das arestas</strong>:
+                <span style="color:dodgerblue">🔵 azul</span> = o peso aumentou |
+                <span style="color:red">🔴 vermelho</span> = o peso diminuiu.
+                A espessura é proporcional ao módulo da variação.</li>
+          </ul>
         </div>
+
+
 
         <h2>Perda ao Vivo</h2>
         <div id="liveLoss"></div>

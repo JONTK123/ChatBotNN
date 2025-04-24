@@ -45,7 +45,7 @@ from transformers import AutoTokenizer
 # ------------------------------#
 #  Constantes
 # ------------------------------#
-EPOCHS       = 50
+EPOCHS       = 100
 BATCH_SIZE   = 1
 LR           = 0.01
 DELTA_TOPK   = 10             # quantos pesos delta serão enviados
@@ -86,7 +86,7 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
 
     # --- Modelo simplificado ---
     class MiniGPT(nn.Module):
-        def __init__(self, vocab, emb=32, hid=64, use_2_layers=False):
+        def __init__(self, vocab, emb=6, hid=6, use_2_layers=False):
             super().__init__()
             self.use_2_layers = use_2_layers
             self.embed = nn.Embedding(vocab, emb)
@@ -96,15 +96,18 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
 
         def forward(self, ids):
             x_emb = self.embed(ids).mean(dim=1)
-            x_hid1 = F.relu(self.ff1(x_emb))
+            # x_hid1 = F.relu(self.ff1(x_emb))
+            x_hid1 = torch.tanh(self.ff1(x_emb))
 
             if self.use_2_layers:
-                x_hid2 = F.relu(self.ff2(x_hid1))
+                # x_hid2 = F.relu(self.ff2(x_hid1))
+                x_hid2 = torch.tanh(self.ff2(x_hid1))
                 out = self.out(x_hid2)
                 return out, x_emb, x_hid1, x_hid2
             else:
                 out = self.out(x_hid1)
                 return out, x_emb, x_hid1
+
 
     model = MiniGPT(tokenizer.vocab_size, use_2_layers=usar2Camadas)
     optim  = torch.optim.Adam(model.parameters(), lr=LR)
@@ -130,20 +133,38 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
         for step, batch in enumerate(loader, 1):
             ids, label = batch["input_ids"], batch["label"]
 
-            # forward / backward
+            # Forward pass
             if usar2Camadas:
                 logits, ativ_emb, ativ_hid1, ativ_hid2 = model(ids)
-                ativacoes = {
-                    "emb": ativ_emb[0].tolist(),
-                    "hid1": ativ_hid1[0].tolist(),
-                    "hid2": ativ_hid2[0].tolist(),
-                }
             else:
                 logits, ativ_emb, ativ_hid1 = model(ids)
-                ativacoes = {
-                    "emb": ativ_emb[0].tolist(),
-                    "hid1": ativ_hid1[0].tolist(),
-                }
+
+            def _fmt(v: float) -> float:
+                return float(f"{v:.2f}")
+
+            # Ativações de input (apenas 4 primeiros embeddings)
+            inp4 = model.embed(ids)[0][:4].tolist()  # raw
+            inp_fmt = [[_fmt(x) for x in vet] for vet in inp4]
+
+            # ativações intermediárias
+            emb_fmt = [_fmt(v) for v in ativ_emb[0].tolist()]
+            hid1_fmt = [_fmt(v) for v in ativ_hid1[0].tolist()]
+            hid2_fmt = [_fmt(v) for v in ativ_hid2[0].tolist()] if usar2Camadas else None
+
+            # top-tokens
+            topk = torch.topk(logits[0], k=4)
+            toks = [
+                (int(i), _fmt(val), tokenizer.decode([i]))
+                for i, val in zip(topk.indices.tolist(), topk.values.tolist())
+            ]
+
+            ativacoes = {
+                "input": inp_fmt,
+                "emb": emb_fmt,
+                "hid1": hid1_fmt,
+                **({"hid2": hid2_fmt} if usar2Camadas else {}),
+                "top_tokens": toks
+            }
 
             loss   = lossfn(logits, label)
             optim.zero_grad(); loss.backward(); optim.step()
@@ -184,7 +205,7 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
             _broadcast_progress({
                 "epoca": ep,
                 "batch": step,
-                "loss": loss.item(),
+                "loss": _fmt(loss.item()),
                 "weights_delta": pesos_delta,
                 "activations": ativacoes
             })
