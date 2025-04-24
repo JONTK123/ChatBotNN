@@ -63,7 +63,7 @@ subscribers: set[WebSocket] = set()
 # ==============================================================#
 #  Função de Treinamento
 # ==============================================================#
-def treinar_rede(frases: list[str], out_dir: pathlib.Path) -> dict:
+def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -> dict:
     """Treina a mini-rede e grava métricas/gráficos no diretório out_dir."""
     # --- Tokenização e pares (entrada → saída) ---
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -86,17 +86,27 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path) -> dict:
 
     # --- Modelo simplificado ---
     class MiniGPT(nn.Module):
-        def __init__(self, vocab, emb=32, hid=64):
+        def __init__(self, vocab, emb=32, hid=64, use_2_layers=False):
             super().__init__()
+            self.use_2_layers = use_2_layers
             self.embed = nn.Embedding(vocab, emb)
-            self.ff1   = nn.Linear(emb, hid)
-            self.out   = nn.Linear(hid, vocab)
+            self.ff1 = nn.Linear(emb, hid)
+            self.ff2 = nn.Linear(hid, hid) if use_2_layers else None
+            self.out = nn.Linear(hid, vocab)
 
         def forward(self, ids):
-            x = self.embed(ids).mean(dim=1)
-            return self.out(F.relu(self.ff1(x)))
+            x_emb = self.embed(ids).mean(dim=1)
+            x_hid1 = F.relu(self.ff1(x_emb))
 
-    model  = MiniGPT(tokenizer.vocab_size)
+            if self.use_2_layers:
+                x_hid2 = F.relu(self.ff2(x_hid1))
+                out = self.out(x_hid2)
+                return out, x_emb, x_hid1, x_hid2
+            else:
+                out = self.out(x_hid1)
+                return out, x_emb, x_hid1
+
+    model = MiniGPT(tokenizer.vocab_size, use_2_layers=usar2Camadas)
     optim  = torch.optim.Adam(model.parameters(), lr=LR)
     lossfn = nn.CrossEntropyLoss()
 
@@ -121,7 +131,20 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path) -> dict:
             ids, label = batch["input_ids"], batch["label"]
 
             # forward / backward
-            logits = model(ids)
+            if usar2Camadas:
+                logits, ativ_emb, ativ_hid1, ativ_hid2 = model(ids)
+                ativacoes = {
+                    "emb": ativ_emb[0].tolist(),
+                    "hid1": ativ_hid1[0].tolist(),
+                    "hid2": ativ_hid2[0].tolist(),
+                }
+            else:
+                logits, ativ_emb, ativ_hid1 = model(ids)
+                ativacoes = {
+                    "emb": ativ_emb[0].tolist(),
+                    "hid1": ativ_hid1[0].tolist(),
+                }
+
             loss   = lossfn(logits, label)
             optim.zero_grad(); loss.backward(); optim.step()
 
@@ -159,10 +182,11 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path) -> dict:
                 pesos_anteriores = pesos_atuais.clone()
 
             _broadcast_progress({
-                "epoca":        ep,
-                "batch":        step,
-                "loss":         loss.item(),
-                "weights_delta": pesos_delta
+                "epoca": ep,
+                "batch": step,
+                "loss": loss.item(),
+                "weights_delta": pesos_delta,
+                "activations": ativacoes
             })
 
         # métricas ao fim da época
@@ -279,12 +303,13 @@ async def ws_endpoint(ws: WebSocket):
 # input schema
 class FrasesInput(BaseModel):
     frases: list[str]
+    usar2Camadas: bool = False
 
 # background task
-def _treino_bg(frases: list[str]):
+def _treino_bg(frases: list[str], usar2Camadas: bool):
     tmp = pathlib.Path(tempfile.mkdtemp())
     estado["treinando"] = True
-    resultado = treinar_rede(frases, tmp)
+    resultado = treinar_rede(frases, tmp, usar2Camadas)  # ← passa para o treino
     estado.update(resultado)
     estado["treinando"] = False
     _broadcast_progress({"done": True, **resultado})
@@ -294,7 +319,7 @@ def _treino_bg(frases: list[str]):
 def treinar(req: FrasesInput, bg: BackgroundTasks):
     if estado["treinando"]:
         return {"msg": "Já existe treino em andamento."}
-    bg.add_task(_treino_bg, req.frases)
+    bg.add_task(_treino_bg, req.frases, req.usar2Camadas)  # ← passa argumento novo
     return {"msg": "Treino iniciado!"}
 
 # rota de status

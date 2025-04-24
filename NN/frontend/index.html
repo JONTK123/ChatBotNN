@@ -1,50 +1,169 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<meta charset="UTF-8" />
-<title>Mini-NN Online</title>
+  <meta charset="UTF-8" />
+  <title>Mini-NN Online</title>
 
-<!-- Plotly para o gráfico -->
-<script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
+  <!-- Plotly -->
+  <script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
+  <!-- Cytoscape -->
+  <script src="https://unpkg.com/cytoscape@3/dist/cytoscape.min.js"></script>
 
-<!-- Cytoscape para visual da rede -->
-<script src="https://unpkg.com/cytoscape@3/dist/cytoscape.min.js"></script>
+  <style>
+    /* --- geral e tema escuro --- */
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      font-family: system-ui, sans-serif;
+      margin: 1rem;
+      display: flex;
+      justify-content: center;
+    }
+    #container {
+      width: 100%;
+      max-width: 1400px;
+    }
+    h1, h2 {
+      text-align: center;
+      margin: 0.5em 0;
+    }
 
-<style>
-  body   { font-family:system-ui; margin:0 2rem; }
-  textarea{ width:320px; height:100px; }
-  #liveLoss{ max-width:500px; height:260px; }
-  #liveNet { width:500px; height:260px; border:1px solid #ccc; }
-  img    { max-width:480px; margin:1rem 0; }
-</style>
+    /* --- textarea centralizada e menor --- */
+    textarea {
+      display: block;
+      margin: 0 auto 1em;
+      width: 90%;
+      max-width: 500px;
+      height: 100px;
+      padding: 0.5em;
+      background: #1e1e1e;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    label, button {
+      color: #e0e0e0;
+      font-size: 1rem;
+    }
+    button {
+      background: #2a2a2a;
+      border: 1px solid #555;
+      padding: 0.5em 1em;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 0.5em;
+    }
+    button:hover {
+      background: #444;
+    }
+
+    #loading {
+      text-align: center;
+      color: #aaa;
+      margin: 1em 0;
+    }
+
+    /* --- layout duas colunas --- */
+    .flex {
+      display: flex;
+      gap: 2em;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+    }
+    /* coluna esquerda fixa estreita */
+    #status-container {
+      flex: 0 0 280px;
+      margin-left: -20px;
+    }
+    /* coluna direita ocupa resto e é bem larga */
+    #graphs-container {
+      flex: 1 1 auto;
+      min-width: 900px;
+    }
+
+    /* --- gráficos bem grandes --- */
+    #liveNet, #liveLoss {
+      width: 100%;
+      height: 480px;
+      border: 1px solid #444;
+      background: #1a1a1a;
+    }
+
+    pre {
+      background: #1e1e1e;
+      padding: 1em;
+      color: #ddd;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 0.9rem;
+    }
+
+    /* --- legenda abaixo da rede --- */
+    .legend {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #bbb;
+      margin-top: 0.5em;
+    }
+
+    /* --- gráficos finais centrados --- */
+    #finalImgs {
+      text-align: center;
+      margin-top: 2em;
+    }
+    #finalImgs img {
+      max-width: 90%;
+      border: 1px solid #444;
+      margin: 1em 0;
+    }
+  </style>
 </head>
 <body>
+  <div id="container">
+    <h1>Mini Rede Neural – Token Predict</h1>
 
-<h1>Mini Rede Neural – Token Predict</h1>
+    <textarea id="txt" placeholder="Digite pelo menos 5 frases…"></textarea>
 
-<textarea id="txt" placeholder="Digite pelo menos 5 frases …"></textarea><br>
-<button id="bt">Treinar!</button>
+    <div style="text-align:center; margin-bottom:1em;">
+      <label>
+        <input type="checkbox" id="modo2camadas">
+        Usar 2 camadas ocultas
+      </label>
+      <button id="bt">Treinar!</button>
+    </div>
 
-<div id="loading" style="display:none; font-weight:bold; color:#444;">
-  ⏳ Treinando... por favor, aguarde.
-</div>
+    <div id="loading" style="display:none;">
+      ⏳ Treinando… por favor, aguarde.
+    </div>
 
-<h2>Status do Treinamento em Tempo Real</h2>
-<p>Mostra a época, batch, perda e os pesos anteriores -> novos.</p>
-<p>Limite de 10 pesos sendo atualizados para demonstracao ( sao muito mais )</p>
+    <div class="flex">
+      <!-- ESQUERDA: status JSON -->
+      <div id="status-container">
+        <h2>Status em Tempo Real</h2>
+        <pre id="status">{}</pre>
+      </div>
 
-<pre id="status">{}</pre>
+      <!-- DIREITA: grafo + loss -->
+      <div id="graphs-container">
+        <h2>Rede (embeddings → hidden)</h2>
+        <div id="liveNet"></div>
+        <div class="legend">
+          Legenda: Cada nó é um neurônio. Cores (azul→vermelho) variam com ativação.<br>
+          Linhas <span style="color:red">vermelhas</span> = aumento de peso, <span style="color:dodgerblue">azuis</span> = redução.
+        </div>
 
-<h2>Perda ao vivo</h2>
-<section id="liveLoss"></section>
+        <h2>Perda ao Vivo</h2>
+        <div id="liveLoss"></div>
+      </div>
+    </div>
 
-<h2>Rede (embeddings → hidden)</h2>
-<section id="liveNet"></section>
+    <h2>Gráficos Finais</h2>
+    <section id="finalImgs"></section>
+  </div>
 
-<h2>Gráficos finais</h2>
-<section id="finalImgs"></section>
-
-<!-- JS principal -->
-<script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
