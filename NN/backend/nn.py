@@ -1,3 +1,4 @@
+
 # ==============================================================#
 #  Mini-NN API
 #  --------------------------------------------------------------#
@@ -115,7 +116,7 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
 
     # --- Inicializa pesos anteriores para deltas ---
     with torch.no_grad():
-        pesos_anteriores = model.embed.weight.flatten().clone()
+        pesos_anteriores = model.ff1.weight.flatten().clone()
 
     # --- Históricos de métricas ---
     hist_loss, hist_acc, hist_ppl = [], [], []
@@ -160,7 +161,6 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
 
             ativacoes = {
                 "input": inp_fmt,
-                "emb": emb_fmt,
                 "hid1": hid1_fmt,
                 **({"hid2": hid2_fmt} if usar2Camadas else {}),
                 "top_tokens": toks
@@ -184,7 +184,7 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
 
             # --- Calcula delta de pesos e envia ao front ---
             with torch.no_grad():
-                pesos_atuais = model.embed.weight.flatten()
+                pesos_atuais = model.ff1.weight.flatten()
 
                 if ENVIAR_TOPK:
                     diferencas = (pesos_atuais - pesos_anteriores).abs()
@@ -291,62 +291,3 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
         "logs": logs_epocas,
         "pngs": pngs_dict
     }
-
-    # ==============================================================#
-#  FastAPI setup
-# ==============================================================#
-app = FastAPI(title="Mini-NN API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# serve PNGs em /static/…
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-# broadcast utilitário
-def _broadcast_progress(payload: dict):
-    txt = json.dumps(payload, default=float)
-    for ws in set(subscribers):
-        try:
-            anyio.from_thread.run(ws.send_text, txt)
-        except RuntimeError:
-            subscribers.discard(ws)
-
-# WebSocket endpoint
-@app.websocket("/ws")
-async def ws_endpoint(ws: WebSocket):
-    await ws.accept()
-    subscribers.add(ws)
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        subscribers.discard(ws)
-
-# input schema
-class FrasesInput(BaseModel):
-    frases: list[str]
-    usar2Camadas: bool = False
-
-# background task
-def _treino_bg(frases: list[str], usar2Camadas: bool):
-    tmp = pathlib.Path(tempfile.mkdtemp())
-    estado["treinando"] = True
-    resultado = treinar_rede(frases, tmp, usar2Camadas)  # ← passa para o treino
-    estado.update(resultado)
-    estado["treinando"] = False
-    _broadcast_progress({"done": True, **resultado})
-
-# rota de início de treino
-@app.post("/treinar")
-def treinar(req: FrasesInput, bg: BackgroundTasks):
-    if estado["treinando"]:
-        return {"msg": "Já existe treino em andamento."}
-    bg.add_task(_treino_bg, req.frases, req.usar2Camadas)  # ← passa argumento novo
-    return {"msg": "Treino iniciado!"}
-
-# rota de status
-@app.get("/status")
-def status():
-    return estado
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

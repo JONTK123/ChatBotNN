@@ -10,7 +10,6 @@
   <script src="https://unpkg.com/cytoscape@3/dist/cytoscape.min.js"></script>
 
   <style>
-    /* --- geral e tema escuro --- */
     body {
       background: #121212;
       color: #e0e0e0;
@@ -19,16 +18,17 @@
       display: flex;
       justify-content: center;
     }
+
     #container {
       width: 100%;
       max-width: 1400px;
     }
+
     h1, h2 {
       text-align: center;
       margin: 0.5em 0;
     }
 
-    /* --- textarea centralizada e menor --- */
     textarea {
       display: block;
       margin: 0 auto 1em;
@@ -42,10 +42,12 @@
       border-radius: 4px;
       font-size: 1rem;
     }
+
     label, button {
       color: #e0e0e0;
       font-size: 1rem;
     }
+
     button {
       background: #2a2a2a;
       border: 1px solid #555;
@@ -54,6 +56,7 @@
       cursor: pointer;
       margin-left: 0.5em;
     }
+
     button:hover {
       background: #444;
     }
@@ -64,7 +67,6 @@
       margin: 1em 0;
     }
 
-    /* --- layout duas colunas --- */
     .flex {
       display: flex;
       gap: 2em;
@@ -72,21 +74,19 @@
       justify-content: space-between;
       flex-wrap: nowrap;
     }
-    /* coluna esquerda fixa estreita */
+
     #status-container {
       flex: 0 0 400px;
       margin-left: -20px;
-      overflow-x: auto; /* caso os valores ainda sejam largos */
+      overflow-x: auto;
     }
 
-    /* coluna direita ocupa resto e é bem larga */
     #graphs-container {
       flex-grow: 3;
       flex-shrink: 1;
       min-width: 700px;
     }
 
-    /* --- gráficos bem grandes --- */
     #liveNet, #liveLoss {
       width: 100%;
       height: 550px;
@@ -104,7 +104,6 @@
       font-size: 0.9rem;
     }
 
-    /* --- legenda abaixo da rede --- */
     .legend {
       text-align: center;
       font-size: 0.9rem;
@@ -112,11 +111,11 @@
       margin-top: 0.5em;
     }
 
-    /* --- gráficos finais centrados --- */
     #finalImgs {
       text-align: center;
       margin-top: 2em;
     }
+
     #finalImgs img {
       max-width: 90%;
       border: 1px solid #444;
@@ -157,37 +156,35 @@
           <h3 style="margin:.2em 0">📜 Como ler este gráfico?</h3>
 
           <ul style="text-align:left; margin:0 auto; max-width:820px; line-height:1.4">
-            <li><strong>Função de ativação</strong>: trocamos <code>ReLU</code> por
-                <code>tanh</code> ― ela deixa os neurônios terem valores
-                <em>negativos</em> <u>e positivos</u>, por isso você vê bolinhas 🔴
-                (negativas) e 🔵 (positivas).</li>
+            <li><strong>Função de ativação:</strong> usamos <code>tanh</code> em vez de <code>ReLU</code>.
+              O <code>ReLU</code> é mais estável (menos picos), mas o <code>tanh</code> gera valores negativos e positivos,
+              o que permite <u>visualizar as ativações com cores</u>:
+              🔵 positivo, 🔴 negativo.</li>
 
-            <li><strong>Número de neurônios de embedding</strong>: agora são
-                <b>6&nbsp;dimensões</b>. Isso deixa a rede pequena o bastante para
-                caber na tela, mas expressiva o bastante para ver padrões.
-                <small>(Para compensar a menor capacidade, subimos o treino para
-                <code>100&nbsp;épocas</code>.)</small></li>
+            <li><strong>Embedding:</strong> cada token é convertido em um vetor com <b>6 dimensões</b>.
+              Essas coordenadas são mostradas nas bolinhas <code>In_0</code> a <code>In_3</code>.</li>
 
-            <li><strong>4 bolinhas de entrada</strong> (<code>In_0 … In_3</code>)
-                → representam os <strong>4 tokens mais recentes</strong> do seu texto
-                de treino.
-                Cada número que aparece dentro da bolinha é uma coordenada do vetor
-                de embedding daquele token.</li>
+            <li><strong>Entradas:</strong> os <b>últimos 4 tokens</b> de cada frase são usados como entrada de uma vez.
+              Eles formam o "contexto" para prever o próximo token.</li>
 
-            <li><strong>4 bolinhas de saída</strong> (<code>Out_TOP_0 … Out_TOP_3</code>)
-                → mostram os <em>quatro tokens mais prováveis</em> que a rede está
-                prevendo no instante atual.
-                O texto é o token decodificado; o número entre parênteses é o
-                <em>logit</em> (quanto maior, mais provável).</li>
+            <li><strong>Saída real:</strong> a rede retorna um vetor (chamado <em>logits</em>) com uma pontuação para <b>cada token do vocabulário</b>.
+              O token com maior valor é considerado o mais provável como próximo.</li>
 
-            <li><strong>Cores das arestas</strong>:
-                <span style="color:dodgerblue">🔵 azul</span> = o peso aumentou |
-                <span style="color:red">🔴 vermelho</span> = o peso diminuiu.
-                A espessura é proporcional ao módulo da variação.</li>
+            <li><strong>Saídas exibidas:</strong> no grafo, mostramos apenas os <b>4 tokens mais prováveis</b> (os Top-4 logits) para facilitar a visualização.</li>
+
+            <li><strong>Setas coloridas:</strong> indicam alterações de pesos durante o aprendizado:
+              <span style="color:dodgerblue">🔵 azul</span> = peso aumentou |
+              <span style="color:red">🔴 vermelho</span> = peso diminuiu.
+              A <b>espessura da linha</b> representa o quanto o peso mudou — quanto maior a variação, mais grossa a linha.</li>
+
+            <li><strong>Monitoramento:</strong> estamos visualizando apenas as conexões de entrada <code>E</code> para a primeira camada oculta <code>H1</code>
+              (<code>E → H1</code>). As demais conexões (<code>H1 → H2</code> e <code>H1/H2 → Out</code>) também mudam,
+              mas não são renderizadas no grafo para manter tudo legível.</li>
+
+            <li><strong>Treinamento:</strong> a rede passa <b>100 vezes</b> por todos os exemplos (100 épocas),
+              permitindo que os pesos sejam ajustados gradualmente com base no erro cometido em cada passo.</li>
           </ul>
         </div>
-
-
 
         <h2>Perda ao Vivo</h2>
         <div id="liveLoss"></div>

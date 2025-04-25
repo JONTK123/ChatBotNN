@@ -148,14 +148,16 @@ function buildMiniGraph() {
 
 function updateGraph({ weights_delta }) {
   weights_delta.forEach(([idx, w0, w1]) => {
-    const e = cy.getElementById(`eh${idx}`);
+    const edgeId = `eh${idx}`;
+    const e = cy.getElementById(edgeId);
     if (!e) return;
     const delta = w1 - w0;
-    const color = delta > 0 ? "red" : "dodgerblue";
+    const color = delta > 0 ? "dodgerblue" : "red";
     const width = 2 + 8 * Math.min(1, Math.abs(delta));
     e.style({ "line-color": color, width });
   });
 }
+
 
 function updateActivations(act) {
   // Entradas → 4 vetores, formatados
