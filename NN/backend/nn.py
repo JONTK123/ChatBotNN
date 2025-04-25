@@ -64,6 +64,10 @@ subscribers: set[WebSocket] = set()
 # ==============================================================#
 #  Função de Treinamento
 # ==============================================================#
+
+ultimo_modelo = None
+ultimo_tokenizer = None
+
 def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -> dict:
     """Treina a mini-rede e grava métricas/gráficos no diretório out_dir."""
     # --- Tokenização e pares (entrada → saída) ---
@@ -285,9 +289,117 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
     loss_inicial = hist_loss[0]
     loss_final = hist_loss[-1]
 
+    global ultimo_modelo, ultimo_tokenizer
+    ultimo_modelo, ultimo_tokenizer = model, tokenizer
+
     return {
         "loss_inicial": loss_inicial,
         "loss_final": loss_final,
         "logs": logs_epocas,
         "pngs": pngs_dict
     }
+
+
+    # ==============================================================#
+#  FastAPI setup
+# ==============================================================#
+app = FastAPI(title="Mini-NN API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# serve PNGs em /static/…
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# broadcast utilitário
+def _broadcast_progress(payload: dict):
+    txt = json.dumps(payload, default=float)
+    for ws in set(subscribers):
+        try:
+            anyio.from_thread.run(ws.send_text, txt)
+        except RuntimeError:
+            subscribers.discard(ws)
+
+# WebSocket endpoint
+@app.websocket("/ws")
+async def ws_endpoint(ws: WebSocket):
+    await ws.accept()
+    subscribers.add(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        subscribers.discard(ws)
+
+# input schema
+class FrasesInput(BaseModel):
+    frases: list[str]
+    usar2Camadas: bool = False
+
+# background task
+def _treino_bg(frases: list[str], usar2Camadas: bool):
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    estado["treinando"] = True
+    resultado = treinar_rede(frases, tmp, usar2Camadas)  # ← passa para o treino
+    estado.update(resultado)
+    estado["treinando"] = False
+    _broadcast_progress({"done": True, **resultado})
+
+# rota de início de treino
+@app.post("/treinar")
+def treinar(req: FrasesInput, bg: BackgroundTasks):
+    if estado["treinando"]:
+        return {"msg": "Já existe treino em andamento."}
+    bg.add_task(_treino_bg, req.frases, req.usar2Camadas)  # ← passa argumento novo
+    return {"msg": "Treino iniciado!"}
+
+# rota de status
+@app.get("/status")
+def status():
+    return estado
+
+@app.post("/tokenizar")
+def tokenizar_frases(frases: list[str]):
+    """Retorna os tokens de cada frase, usando .split() e tokenizer.encode()."""
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    return [
+        {
+            "frase": frase,
+            "tokens_simples": frase.split(),
+            "tokens_transformer": tokenizer.convert_ids_to_tokens(
+                tokenizer.encode(frase, add_special_tokens=False)
+            )
+        }
+        for frase in frases
+    ]
+
+
+# ------------------------------------------------------------
+#  📝  rota de autocomplete
+# ------------------------------------------------------------
+class PromptIn(BaseModel):
+    prompt: str
+    max_tokens: int = 20  # segurança
+
+
+@app.post("/completar")
+def completar(req: PromptIn):
+    if ultimo_modelo is None:
+        return {"erro": "Treine primeiro"}
+
+    ids = ultimo_tokenizer.encode(req.prompt, add_special_tokens=False)
+    # Gera até max_tokens ou até “.” + espaço
+    for _ in range(req.max_tokens):
+        window = ids[-4:]  # últimos 4 tokens
+        x = torch.tensor([window])
+        with torch.no_grad():
+            logits, *_ = ultimo_modelo(x)
+        next_id = int(logits[0].argmax())
+        ids.append(next_id)
+        if next_id in [198, 13]:  # 198 = \n, 13 = ponto (gpt-2)
+            break
+
+    texto = ultimo_tokenizer.decode(ids[len(window):])
+    return {"continuacao": texto.strip()}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

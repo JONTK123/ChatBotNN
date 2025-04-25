@@ -1,10 +1,12 @@
 const API = "http://127.0.0.1:8000";
 let usar2Camadas = false;
+let tokensMostrados = false;
 
 document.getElementById("bt").onclick = async () => {
   const frases = document.getElementById("txt").value
     .split("\n")
     .filter(l => l.trim());
+
   usar2Camadas = document.getElementById("modo2camadas").checked;
 
   if (frases.length < 5) {
@@ -12,10 +14,39 @@ document.getElementById("bt").onclick = async () => {
     return;
   }
 
+  if (!tokensMostrados) {
+    // PRIMEIRO CLIQUE: mostrar tokens
+    const tokenPreview = await fetch(API + "/tokenizar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(frases)
+    });
+
+    const tokenData = await tokenPreview.json();
+    const tokenBox = document.getElementById("tokensDebug");
+    tokenBox.innerHTML = "";
+
+    tokenData.forEach(({ frase, tokens_simples, tokens_transformer }, i) => {
+      tokenBox.innerHTML += `
+        <div style="text-align:left; margin-bottom:1em;">
+          <b>Frase ${i + 1}:</b> <code>${frase}</code><br>
+          <b>Tokens (split):</b> <code>${tokens_simples.join(" | ")}</code><br>
+          <b>Tokens (transformers):</b> <code>${tokens_transformer.join(" | ")}</code>
+        </div>
+      `;
+    });
+
+    document.getElementById("bt").textContent = "🚀 Iniciar Treinamento";
+    tokensMostrados = true;
+    return;
+  }
+
+  // SEGUNDO CLIQUE: inicia o treino
   document.getElementById("loading").style.display = "block";
   document.getElementById("bt").style.display = "none";
   document.getElementById("status").textContent = "{}";
   document.getElementById("finalImgs").innerHTML = "";
+  document.getElementById("treinoInfo")?.remove();
 
   cy.elements().remove();
   cy.add(buildMiniGraph());
@@ -213,6 +244,7 @@ function showStatus(msg) {
 }
 
 function mostrarResumoFinal(msg) {
+  // Info de treino
   const info = document.getElementById("treinoInfo") || document.createElement("div");
   info.id = "treinoInfo";
   info.style = "margin:1em 0;font-size:1rem;color:#ddd";
@@ -223,6 +255,38 @@ function mostrarResumoFinal(msg) {
   `;
   document.querySelector("#liveLoss").before(info);
 
+  // 1️⃣ Esconde o bloco de preview dos tokens
+  document.getElementById("tokenInfo").style.display = "none";
+
+  // 2️⃣ Mostra input de autocompletar se ainda não foi criado
+  if (!document.getElementById("predictBox")) {
+    const div = document.createElement("div");
+    div.id = "predictBox";
+    div.style = "margin:2em 0;text-align:center";
+
+    div.innerHTML = `
+      <h2>🤖 Teste o modelo</h2>
+      <input id="promptInp" placeholder="Comece digitando uma frase do treino…" 
+             style="width:60%;max-width:500px;padding:.5em;border-radius:4px;border:1px solid #555;background:#1e1e1e;color:#eee">
+      <button id="btnPred" style="margin-left:.5em">Completar</button>
+      <div id="predOut" style="margin-top:1em;color:#8be9fd"></div>
+    `;
+    document.querySelector("#container").appendChild(div);
+
+    document.getElementById("btnPred").onclick = async () => {
+      const prompt = document.getElementById("promptInp").value.trim();
+      if (!prompt) return;
+      const r = await fetch(API + "/completar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      const { continuacao, erro } = await r.json();
+      document.getElementById("predOut").textContent = erro || continuacao;
+    };
+  }
+
+  // 3️⃣ Reiniciar (refaz a interface do botão)
   const old = document.getElementById("bt");
   if (old) {
     const p = old.parentElement;
@@ -231,34 +295,16 @@ function mostrarResumoFinal(msg) {
     const btn = document.createElement("button");
     btn.id = "bt";
     btn.textContent = "🔄 Reiniciar";
-    btn.onclick = () => location.reload();
+    btn.onclick = () => {
+      document.getElementById("tokenInfo").style.display = "block";
+      location.reload();
+    };
     p.insertBefore(btn, p.children[pos] || null);
   }
 
+  // 4️⃣ Mostra PNGs se tiver
   if (msg.pngs) showPngs(msg.pngs);
-  document.getElementById("loading").style.display = "none";
-}
 
-function showPngs(pngs) {
-  const div = document.getElementById("finalImgs");
-  div.innerHTML = "";
-  for (const [k, u] of Object.entries(pngs)) {
-    const t = {
-      loss_epoca: "📉 Loss por Época",
-      acuracia: "✅ Acurácia",
-      perplexidade: "🧠 Perplexidade",
-      prf1: "🎯 Precision/Recall/F1",
-      erros: "❌ Top-10 Erros",
-      mapa3d: "🌌 Mapa 3D",
-      confusao: "🧮 Matriz de Confusão"
-    }[k] || k;
-    const h = document.createElement("h3");
-    h.textContent = t;
-    h.style.color = "#fff";
-    const img = document.createElement("img");
-    img.src = API + u;
-    img.alt = k;
-    div.appendChild(h);
-    div.appendChild(img);
-  }
+  // 5️⃣ Esconde o "carregando"
+  document.getElementById("loading").style.display = "none";
 }
