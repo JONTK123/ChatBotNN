@@ -1,153 +1,156 @@
-# ChatBotNN
+# 🧠 Token-Predict-API – Neural‑Network TokenPredictor
 
-## English
+A **tiny, visual LLM playground** built with **PyTorch**, **FastAPI** and vanilla **JavaScript**.  
+It *predicts the next token (word)* given the **last 4 tokens** of a sentence and streams all training internals to the browser in real‑time.
 
-### Overview
-
-**ChatBotNN** is a simple neural network-based chatbot prototype focused on natural language understanding within the context of hotel services.  
-It uses a small, manually crafted dataset of hotel-related phrases and demonstrates basic tokenization, dataset preparation, and training of a minimal language model using **PyTorch**.
-
-This project is designed for **educational and experimental purposes**, aiming to explain the inner workings of tokenization and language model training.
+> **Educational only** – perfect for demos, live coding, and understanding how language‑model pieces fit together.
 
 ---
 
-### Dataset
+## 🎯  Purpose
 
-A basic dataset composed of hotel-related sentences in Portuguese:
+*   De‑mystify how *small* LLMs learn token‑by‑token  
+*   Visualise **embeddings, activations, weight deltas** while training  
+*   Mix **hand‑made tokenisation** with a real **GPT‑2 tokenizer**  
+*   Provide a hackable code‑base for experiments and blog posts  
+
+---
+
+## 📦  Features
+
+| Category | Details                                                                        |
+|----------|--------------------------------------------------------------------------------|
+| **Model** | Custom `MiniGPT` (embeddings → 1 or 2 hidden layers → vocab logits)            |
+| **Visuals** | Live loss line‑chart, 3‑D loss surface, confusion matrix, top‑error tokens     |
+| **Frontend** | Plain HTML+ JS (Plotly, Cytoscape.js, WebSockets)                              |
+| **Training** | Adam+CrossEntropy, configurable epochs, live batch streaming                   |
+| **Tokeniser** | GPT‑2 tokenizer (**HuggingFace**) + manual split for comparison                |
+| **API** | FastAPI endpoints `/treinar`, `/tokenizar`, `/completar`, plus WebSocket `/ws` |
+
+---
+
+## ⚠️  Limitations
+
+* Predicts **only the next token** – no full text generation  
+* Context window hard‑coded to **4 tokens**  
+* Needs **≥ 50 phrases** and around **100‑150 epochs** for stable learning  
+* Frontend is deliberately **minimal** (study‑oriented)  
+* Not production‑ready; expect mistakes for rare / unseen tokens  
+
+---
+
+## 💡  Ideas for Improvement
+
+*   Extend context to 6‑8 tokens  
+*   Wider embeddings / hidden layers  
+*   Larger, more diverse training corpora  
+*   Replace FF‑layers with GRU / Transformer blocks  
+*   Generate full sentences instead of token‑by‑token  
+
+---
+
+## 🧭  System Flow
+
+1. Paste training phrases → click **“Tokenise!”**  
+2. App shows both **split tokens** and **GPT‑2 tokens**  
+3. Click **“Train”** → live graphs & activations stream via WebSocket  
+4. When done, type a 4‑token prompt and press **“Complete”**  
+5. API returns the most probable next token, rendered instantly  
+
+---
+
+## ✨  Example Prompts
+
+| Prompt (`last 4 tokens`) | Likely Prediction |
+|--------------------------|-------------------|
+| `eu gosto de comer`      | `maçã`, `banana`, … |
+| `hoje o céu está`        | `limpo`, `nublado`, … |
+| `você precisa estudar`   | `mais`, `agora`, … |
+| `ela gosta de pintar`    | `quadros`, `paredes` |
+
+---
+
+## 📂  Mini Dataset (you can swap your own - at any language!!!!!!!)
 
 ```python
 frases = [
-    "o hotel oferece wi-fi gratuito",
-    "o check-in começa às 14h",
-    "o café da manhã é servido até as 10h",
-    "a recepção funciona 24 horas",
-    "o check-out é até meio-dia",
-    "para ligar nao perturbe, toque no interruptor 2",
-    "o hotel tem piscina aquecida",
-    "o hotel tem academia",
-    "o hotel tem estacionamento gratuito",
-    "o hotel tem serviço de lavanderia",
-    "o hotel tem serviço de quarto 24 horas",
+    "eu gosto de comer maçã",
+    "ela gosta de pintar quadros",
+    "nós vamos ao parque amanhã",
+    "ele vai sair hoje à tarde",
+    "você precisa estudar agora",
+    "hoje o céu está limpo",
+    "amanhã o tempo estará frio",
+    "nós queremos comprar uma casa",
+    "você quer comprar um celular",
+    "eles vão ao mercado cedo",
 ]
 ```
 
----
+## 🛠Installation & Usage
 
-### Key Components
-
-#### Tokenization (Manual and via Transformers)
-
-- Manual token-to-ID mapping
-- Tokenization using HuggingFace's `AutoTokenizer` (GPT-2)
-
-#### Training Sample Generation
-
-- Pairs of (partial sentence → next word)
-- Prepared both manually and using tokenizer-based IDs
-
-#### Model Architecture
-
-A small neural network (`MiniGPT`) with:
-
-- Embedding layer
-- Hidden dense layer (ReLU)
-- Output layer predicting vocabulary tokens
-
-#### Training
-
-- Custom PyTorch `Dataset` and `DataLoader`
-- CrossEntropy loss
-- `Adam` optimizer
-- 50 training epochs
-
-#### Inference
-
-- A function to generate the next word based on an input sentence
-
----
-
-### Libraries Used
-
-- `torch`
-- `transformers` (HuggingFace)
-- `torch.nn`, `torch.utils.data`
-
----
-
-## Português
-
-### Visão Geral
-
-**ChatBotNN** é um protótipo simples de chatbot baseado em rede neural, com foco na compreensão de linguagem natural em contexto hoteleiro.  
-Utiliza um dataset básico de frases relacionadas a serviços de hotel e demonstra, de forma didática, os processos de tokenização, preparação de dados e treinamento de um modelo de linguagem minimalista com **PyTorch**.
-
-Este projeto tem fins **educacionais e exploratórios**, buscando mostrar o funcionamento interno de um modelo de linguagem.
-
----
-
-### Dataset
-
-Um dataset simples com frases sobre serviços de hotel:
+###1–Clone
 
 ```python
-frases = [
-    "o hotel oferece wi-fi gratuito",
-    "o check-in começa às 14h",
-    "o café da manhã é servido até as 10h",
-    "a recepção funciona 24 horas",
-    "o check-out é até meio-dia",
-    "para ligar nao perturbe, toque no interruptor 2",
-    "o hotel tem piscina aquecida",
-    "o hotel tem academia",
-    "o hotel tem estacionamento gratuito",
-    "o hotel tem serviço de lavanderia",
-    "o hotel tem serviço de quarto 24 horas",
-]
+git clone https://github.com/JONTK123/Token-Predict-API.git
+cd ChatBotNN
 ```
 
----
+### 2 – Dependencies
 
-### Componentes Principais
+```python
+python -m venv .venv
+# Windows  →  .venv\Scripts\activate
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-#### Tokenização (Manual e via Transformers)
+### 3 – Start the API
 
-- Mapeamento manual de palavras para IDs
-- Tokenização usando `AutoTokenizer` (GPT-2) da HuggingFace
+```python
+uvicorn backend.nn:app --reload
+```
 
-#### Geração de Dados de Treino
+### 4 – Open the Front‑End
 
-- Pares de (frase parcial → próxima palavra)
-- Gerados manualmente e via IDs tokenizados
+Simply open frontend/index.html in your browser.
+Paste sentences → Tokenise → Train → play with predictions
 
-#### Arquitetura do Modelo
+###5 - Requirements.txt
 
-Rede neural simples (`MiniGPT`) com:
+```python
+fastapi
+uvicorn
+torch
+transformers
+scikit-learn
+matplotlib
+numpy
+anyio
+```
 
-- Camada de embeddings
-- Camada oculta densa (ReLU)
-- Camada de saída para prever o próximo token
+## 🔍How It Works
 
-#### Treinamento
+1. Tokenisation – GPT‑2 tokenizer (HuggingFace) + naive .split() for side‑by‑side comparison
+2. Pair generation – for every sentence:
+Input = first N tokens → Label = the next token
+3. Model – embeddings → hidden layer(s) → vocab‑size logits 
+4. Training loop – Adam + CrossEntropy, live progress pushed via WebSocket
+5. Inference – give 4 tokens, API returns argmax(logits) as the predicted next token
 
-- `Dataset` e `DataLoader` com PyTorch
-- Função de perda CrossEntropy
-- Otimizador `Adam`
-- 50 épocas de treino
+## 🧠 About
 
-#### Inferência
+Built by [@Thiago / JONTK123] to learn & teach:
+Linkedin -> https://www.linkedin.com/in/thiago-luiz-fossa-26b440276/?locale=pt_BR
 
-- Função para prever a próxima palavra com base em uma frase de entrada
+- Neural‑network fundamentals
+- Embedding layers and tokenisation quirks
+- PyTorch training pipelines
+- Mini‑LLM behaviour on tiny datasets
+## 🚧 Disclaimer
 
----
+This repository **is not production-ready**.  
+Predictions may be wrong or biased, especially for unseen words.  
+It exists purely for learning, experimentation, and visual intuition.
 
-### Bibliotecas Utilizadas
-
-- `torch`
-- `transformers` (HuggingFace)
-- `torch.nn`, `torch.utils.data`
-
----
-
-### Objetivo
-
-Demonstrar, de forma prática e acessível, como funcionam os fundamentos de um modelo de linguagem neural simples — desde o pré-processamento até o treinamento e a geração de texto.
+Pull requests, issues, and discussions are welcome – have fun.

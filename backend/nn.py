@@ -1,52 +1,28 @@
-
-# ==============================================================#
-#  Mini-NN API
-#  --------------------------------------------------------------#
-#  • Treina uma mini-rede neural (prevê o próximo token)         #
-#  • Faz streaming das métricas por WebSocket                    #
-#  • Gera PNGs e os serve em /static/…                           #
-# ==============================================================#
-
-# ------------------------------#
-#  Imports
-# ------------------------------#
 import json
 import pathlib
 import shutil
 import tempfile
 from collections import Counter
 from datetime import datetime as dt
-
 import anyio
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import uvicorn
-from fastapi import (
-    BackgroundTasks,
-    FastAPI,
-    WebSocket,
-    WebSocketDisconnect,
-)
+from fastapi import (BackgroundTasks, FastAPI, WebSocket, WebSocketDisconnect)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sklearn.metrics import (
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-)
+from sklearn.metrics import (precision_score, recall_score, f1_score, confusion_matrix, ConfusionMatrixDisplay)
+from starlette.responses import JSONResponse
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer
+import time
 
 # ------------------------------#
 #  Constantes
 # ------------------------------#
-EPOCHS       = 100
+EPOCHS       = 150
 BATCH_SIZE   = 1
 LR           = 0.01
 DELTA_TOPK   = 10             # quantos pesos delta serão enviados
@@ -300,7 +276,7 @@ def treinar_rede(frases: list[str], out_dir: pathlib.Path, usar2Camadas: bool) -
     }
 
 
-    # ==============================================================#
+# ==============================================================#
 #  FastAPI setup
 # ==============================================================#
 app = FastAPI(title="Mini-NN API")
@@ -315,7 +291,9 @@ def _broadcast_progress(payload: dict):
     for ws in set(subscribers):
         try:
             anyio.from_thread.run(ws.send_text, txt)
-        except RuntimeError:
+            time.sleep(0.01)  # ← Aqui suaviza os envios
+        except Exception as e:
+            print(f"❌ WebSocket erro: {e}")
             subscribers.discard(ws)
 
 # WebSocket endpoint
@@ -348,7 +326,7 @@ def _treino_bg(frases: list[str], usar2Camadas: bool):
 def treinar(req: FrasesInput, bg: BackgroundTasks):
     if estado["treinando"]:
         return {"msg": "Já existe treino em andamento."}
-    bg.add_task(_treino_bg, req.frases, req.usar2Camadas)  # ← passa argumento novo
+    bg.add_task(_treino_bg, req.frases, req.usar2Camadas)
     return {"msg": "Treino iniciado!"}
 
 # rota de status
@@ -360,7 +338,7 @@ def status():
 def tokenizar_frases(frases: list[str]):
     """Retorna os tokens de cada frase, usando .split() e tokenizer.encode()."""
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    return [
+    dados = [
         {
             "frase": frase,
             "tokens_simples": frase.split(),
@@ -370,6 +348,7 @@ def tokenizar_frases(frases: list[str]):
         }
         for frase in frases
     ]
+    return JSONResponse(content=dados, media_type="application/json; charset=utf-8")
 
 
 # ------------------------------------------------------------
@@ -379,27 +358,29 @@ class PromptIn(BaseModel):
     prompt: str
     max_tokens: int = 20  # segurança
 
-
 @app.post("/completar")
 def completar(req: PromptIn):
     if ultimo_modelo is None:
         return {"erro": "Treine primeiro"}
 
     ids = ultimo_tokenizer.encode(req.prompt, add_special_tokens=False)
-    # Gera até max_tokens ou até “.” + espaço
-    for _ in range(req.max_tokens):
-        window = ids[-4:]  # últimos 4 tokens
-        x = torch.tensor([window])
-        with torch.no_grad():
-            logits, *_ = ultimo_modelo(x)
-        next_id = int(logits[0].argmax())
-        ids.append(next_id)
-        if next_id in [198, 13]:  # 198 = \n, 13 = ponto (gpt-2)
-            break
 
-    texto = ultimo_tokenizer.decode(ids[len(window):])
-    return {"continuacao": texto.strip()}
+    if not ids and len(req.prompt.strip().split()) >= 1:
+        words = req.prompt.strip().split()
+        ultimas_palavras = words[-4:]  # limite de contexto
+        word2id = {w: i for i, w in enumerate(set(" ".join(estado.get("frases", [])).split()))}
+        ids = [word2id.get(w, 0) for w in ultimas_palavras]
 
+    if not ids:
+        return {"erro": "Entrada muito curta ou inválida"}
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    x = torch.tensor([ids])
+
+    with torch.no_grad():
+        logits, *_ = ultimo_modelo(x)
+
+    next_token_id = int(logits[0].argmax())
+    next_token = ultimo_tokenizer.decode([next_token_id])
+
+    # retorna no formato esperado pelo frontend
+    return {"continuacao": next_token.strip()}

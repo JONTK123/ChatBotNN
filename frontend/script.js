@@ -1,7 +1,8 @@
-const API = "http://127.0.0.1:8000";
+const API = "http://127.0.0.1:8000";  // Verifique se este é o endpoint correto
 let usar2Camadas = false;
 let tokensMostrados = false;
 
+// Ação ao clicar no botão
 document.getElementById("bt").onclick = async () => {
   const frases = document.getElementById("txt").value
     .split("\n")
@@ -10,7 +11,7 @@ document.getElementById("bt").onclick = async () => {
   usar2Camadas = document.getElementById("modo2camadas").checked;
 
   if (frases.length < 5) {
-    alert("Digite pelo menos 5 linhas");
+    alert("Digite pelo menos 5 frases");
     return;
   }
 
@@ -52,6 +53,7 @@ document.getElementById("bt").onclick = async () => {
   cy.add(buildMiniGraph());
   cy.layout({ name: "preset" }).run();
 
+  // Inicia o treinamento
   await fetch(API + "/treinar", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -59,11 +61,11 @@ document.getElementById("bt").onclick = async () => {
   });
 };
 
-// WebSocket – stream
+// WebSocket – stream de atualizações do treinamento
 let ws;
 connectStream();
 function connectStream() {
-  ws = new WebSocket("ws://127.0.0.1:8000/ws");
+  ws = new WebSocket("ws://127.0.0.1:8000/ws");  // Garantir que a URL seja correta
   ws.onopen = () => console.log("✅ WS conectado");
   ws.onmessage = ({ data }) => {
     const msg = JSON.parse(data);
@@ -73,7 +75,7 @@ function connectStream() {
     if (msg.done) mostrarResumoFinal(msg);
     showStatus(msg);
   };
-  ws.onclose = () => setTimeout(connectStream, 2000);
+  ws.onclose = () => setTimeout(connectStream, 2000);  // Tenta reconectar em caso de desconexão
 }
 
 // Plotly – gráfico de loss
@@ -89,6 +91,7 @@ window.onload = () => {
   });
 };
 
+// Atualiza gráfico de loss durante o treinamento
 let passo = 0;
 function updateCharts({ loss }) {
   passo++;
@@ -97,7 +100,7 @@ function updateCharts({ loss }) {
   }, [0], 500);
 }
 
-// Cytoscape – rede neural
+// Cytoscape – rede neural visual
 const cy = cytoscape({
   container: document.querySelector("#liveNet"),
   elements: [],
@@ -142,6 +145,7 @@ const cy = cytoscape({
   ]
 });
 
+// Função para construir o gráfico da rede
 function buildMiniGraph() {
   const els = [], totalHidden = 6, y0 = 20, dy = 80;
 
@@ -177,6 +181,7 @@ function buildMiniGraph() {
   return els;
 }
 
+// Atualiza o gráfico de pesos (delta)
 function updateGraph({ weights_delta }) {
   weights_delta.forEach(([idx, w0, w1]) => {
     const edgeId = `eh${idx}`;
@@ -189,16 +194,14 @@ function updateGraph({ weights_delta }) {
   });
 }
 
-
+// Atualiza ativações
 function updateActivations(act) {
-  // Entradas → 4 vetores, formatados
   act.input?.forEach((vetor, i) => {
     const label = vetor.map(x => x.toFixed(2)).join(", ");
     const node = cy.getElementById(`In_${i}`);
     if (node) node.style("label", label);
   });
 
-  // Hidden 1
   act.hid1?.forEach((v, i) => {
     const node = cy.getElementById(`H1_${i}`);
     if (node) {
@@ -207,7 +210,6 @@ function updateActivations(act) {
     }
   });
 
-  // Hidden 2
   act.hid2?.forEach((v, i) => {
     const node = cy.getElementById(`H2_${i}`);
     if (node) {
@@ -216,7 +218,6 @@ function updateActivations(act) {
     }
   });
 
-  // Saídas
   cy.nodes().filter(n => n.id().startsWith("Out_TOP_")).remove();
   act.top_tokens?.forEach(([id, val, txt], i) => {
     const y = 100 + i * 90;
@@ -228,6 +229,7 @@ function updateActivations(act) {
   });
 }
 
+// Função para calcular cor das ativações
 function calcularCor(valor) {
   const escala = Math.tanh(valor);
   const abs = Math.abs(escala);
@@ -238,13 +240,14 @@ function calcularCor(valor) {
   return 'rgb(200, 200, 200)';
 }
 
+// Mostra status do treinamento
 function showStatus(msg) {
   const { pngs, logs, ...rest } = msg;
   document.getElementById("status").textContent = JSON.stringify(rest, null, 2);
 }
 
+// Exibe o resumo final
 function mostrarResumoFinal(msg) {
-  // Info de treino
   const info = document.getElementById("treinoInfo") || document.createElement("div");
   info.id = "treinoInfo";
   info.style = "margin:1em 0;font-size:1rem;color:#ddd";
@@ -255,25 +258,24 @@ function mostrarResumoFinal(msg) {
   `;
   document.querySelector("#liveLoss").before(info);
 
-  // 1️⃣ Esconde o bloco de preview dos tokens
   document.getElementById("tokenInfo").style.display = "none";
 
-  // 2️⃣ Mostra input de autocompletar se ainda não foi criado
   if (!document.getElementById("predictBox")) {
     const div = document.createElement("div");
     div.id = "predictBox";
     div.style = "margin:2em 0;text-align:center";
 
     div.innerHTML = `
-      <h2>🤖 Teste o modelo</h2>
+      <h2>Teste o modelo</h2>
       <input id="promptInp" placeholder="Comece digitando uma frase do treino…" 
              style="width:60%;max-width:500px;padding:.5em;border-radius:4px;border:1px solid #555;background:#1e1e1e;color:#eee">
       <button id="btnPred" style="margin-left:.5em">Completar</button>
       <div id="predOut" style="margin-top:1em;color:#8be9fd"></div>
     `;
-    document.querySelector("#container").appendChild(div);
+    info.after(div);
 
     document.getElementById("btnPred").onclick = async () => {
+      document.getElementById("predOut").textContent = "";
       const prompt = document.getElementById("promptInp").value.trim();
       if (!prompt) return;
       const r = await fetch(API + "/completar", {
@@ -286,7 +288,9 @@ function mostrarResumoFinal(msg) {
     };
   }
 
-  // 3️⃣ Reiniciar (refaz a interface do botão)
+  if (msg.pngs) showPngs(msg.pngs);
+
+  // Reinicia o botão de treino
   const old = document.getElementById("bt");
   if (old) {
     const p = old.parentElement;
@@ -302,9 +306,44 @@ function mostrarResumoFinal(msg) {
     p.insertBefore(btn, p.children[pos] || null);
   }
 
-  // 4️⃣ Mostra PNGs se tiver
-  if (msg.pngs) showPngs(msg.pngs);
-
-  // 5️⃣ Esconde o "carregando"
   document.getElementById("loading").style.display = "none";
+}
+
+// Exibe os gráficos finais
+function showPngs(pngs) {
+  const div = document.getElementById("finalImgs");
+  div.innerHTML = "";
+
+  const titulos = {
+    grafico_acuracia:       "Acurácia",
+    grafico_confusao:       "Matriz de Confusão",
+    grafico_erros:          "Top‑10 Tokens com mais erros",
+    grafico_loss_epoca:     "Loss por Época",
+    grafico_mapa3d:         "Loss por Batch (3D)",
+    grafico_perplexidade:   "Perplexidade",
+    grafico_prf1:           "Precision / Recall / F1"
+  };
+
+  const legendas = {
+    grafico_acuracia:       "Mostra quantas previsões foram corretas. Ideal é próximo de 100%.",
+    grafico_confusao:       "Mostra onde a rede mais acerta ou erra. Ideal é a diagonal estar destacada.",
+    grafico_erros:          "Tokens que a rede mais errou ao longo do treino. Útil para analisar dificuldades.",
+    grafico_loss_epoca:     "Erro total da rede em cada época. Quanto menor, melhor.",
+    grafico_mapa3d:         "Valor do loss por batch em todas as épocas. Picos indicam instabilidade.",
+    grafico_perplexidade:   "Mede o quão “surpreso” o modelo está. Quanto menor, mais confiante.",
+    grafico_prf1:           "Métricas clássicas de classificação. Mostram quão equilibrado está o desempenho."
+  };
+
+  for (const [nome, url] of Object.entries(pngs)) {
+    const titulo = titulos[nome] || nome;
+    const legenda = legendas[nome] || "";
+
+    div.innerHTML += `
+      <h3 style="margin-top:2em">${titulo}</h3>
+      <img src="${API + url}" alt="${nome}">
+      <div class="legend" style="max-width:700px;margin:0 auto 1em;font-size:.95rem;color:#bbb">
+        ${legenda}
+      </div>
+    `;
+  }
 }
